@@ -20,24 +20,26 @@ var noop = function () {};
 /**
  * @function
  * @description compute a key used to store unique jobs map
+ * @param {String} job type
  * @return {String} a key to retrieve unique jobs map
  * @private
  */
-Job.getUniqueJobsKey = function () {
-  return Job.client.getKey('unique:jobs');
+Job.getUniqueJobsKey = function (jobType) {
+  return Job.client.getKey('unique:jobs:' + jobType);
 };
 
 
 /**
  * @function
  * @description retrieved saved unique jobs data from redis backend
+ * @param {String} job type
  * @param {Function} done a callback to invoke on success or error
  * @return {Object} unique jobs data
  * @private
  */
-Job.getUniqueJobsData = function (done) {
+Job.getUniqueJobsData = function (jobType, done) {
 
-  var key = this.getUniqueJobsKey();
+  var key = this.getUniqueJobsKey(jobType);
   Job
     .client
     .hgetall(key, function (error, data) {
@@ -64,14 +66,15 @@ Job.getUniqueJobsData = function (done) {
 /**
  * @function
  * @description retrieved saved unique job data
+ * @param {String} job type
  * @param {String} unique a unique job identifier
  * @param {Function} done a callback to invoke on success or error
  * @return {Object} unique jobs data
  * @private
  */
-Job.getUniqueJobData = function (unique, done) {
+Job.getUniqueJobData = function (jobType, unique, done) {
 
-  var key = this.getUniqueJobsKey();
+  var key = this.getUniqueJobsKey(jobType);
 
   Job.client.hget(key, unique, function (error, data) {
     //pick unique job data
@@ -96,19 +99,20 @@ Job.getUniqueJobData = function (unique, done) {
 /**
  * @function
  * @description remove unique jobs data from redis backend
+ * @param {String} job type
  * @param {Number} id job id to remove from unique job datas
  * @param {Function} done a callback to invoke on success or error
  * @return {Object} unique jobs data
  * @private
  */
-Job.removeUniqueJobData = function (id, done) {
+Job.removeUniqueJobData = function (jobType, id, done) {
 
-  var key = Job.getUniqueJobsKey();
+  var key = Job.getUniqueJobsKey(jobType);
 
   async.waterfall([
 
     function loadUniqueJobsData(next) {
-      Job.getUniqueJobsData(next);
+      Job.getUniqueJobsData(jobType, next);
     },
 
     function dosave(uniqueJobsData, next) {
@@ -127,7 +131,7 @@ Job.removeUniqueJobData = function (id, done) {
     },
 
     function reloadUniqueJobsData(next) {
-      Job.getUniqueJobsData(next);
+      Job.getUniqueJobsData(jobType, next);
     }
 
   ], done);
@@ -138,14 +142,15 @@ Job.removeUniqueJobData = function (id, done) {
 /**
  * @function
  * @description save unique jobs data into redis backend
+ * @param {String} job type
  * @param {Object} uniqueJobData unique job data to add to existing ones
  * @param {Function} done a callback to invoke on success or error
  * @return {Object} unique jobs data
  * @private
  */
-Job.saveUniqueJobsData = function (uniqueJobData, done) {
+Job.saveUniqueJobsData = function (jobType, uniqueJobData, done) {
 
-  var key = Job.getUniqueJobsKey();
+  var key = Job.getUniqueJobsKey(jobType);
 
   var field;
   if (Object.keys(uniqueJobData).length > 0) {
@@ -159,8 +164,9 @@ Job.saveUniqueJobsData = function (uniqueJobData, done) {
       if (error) {
         return done(error, null);
       } else {
-
-        Job.getUniqueJobsData(done);
+		return done(null, null);
+        //not necessary
+		//Job.getUniqueJobsData(jobType, done);
       }
 
     });
@@ -199,7 +205,7 @@ Job.prototype.save = function (done) {
     async.waterfall([
 
       function tryGetExistingJobData(next) {
-        Job.getUniqueJobData(this.data.unique, next);
+        Job.getUniqueJobData(this.type, this.data.unique, next);
       }.bind(this),
 
       function tryGetExistingOrSaveJob(uniqueJobData, next) {
@@ -238,7 +244,7 @@ Job.prototype.save = function (done) {
 
         uniqueJobData[job.data.unique] = job.id;
 
-        Job.saveUniqueJobsData(uniqueJobData, function (error /*,uniqueJobsData*/ ) {
+        Job.saveUniqueJobsData(job.type, uniqueJobData, function (error /*,uniqueJobsData*/ ) {
           next(error, job);
         });
       }
@@ -270,7 +276,7 @@ Job.prototype.remove = function (done) {
     }.bind(this),
 
     removeUniqueData: function (next) {
-      Job.removeUniqueJobData(this.id, next);
+      Job.removeUniqueJobData(this.type, this.id, next);
     }.bind(this)
 
   }, function finalize(error /*, results*/ ) {
